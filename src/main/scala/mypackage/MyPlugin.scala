@@ -39,31 +39,117 @@ class MyPlugin(val global: Global) extends Plugin {
       // TODO: fill in your logic here
       override def transform(tree: Tree): Tree = tree match {
         case tree @ DefDef(mods, name, tparams, vparamss, tpt, rhs) if name.toString == "foo" =>
-          val modifiedTree = addExitStatement(addEnteringStatement(rhs))
-          tree.copy(rhs = modifiedTree)
+          new LoggingDecorator(tree).withDecoration
 
         // don't forget this case, so that tree is actually traversed
         case _ => super.transform(tree)
       }
     }
 
-    private def makePrintlnStatement(stringToPrint: String) = Apply(Ident(newTermName("println")), List(Literal(Constant(stringToPrint))))
+    class LoggingDecorator(method: DefDef) {
+      def withDecoration: Tree = {
+        val modifiedTree = addExitStatement(addEnteringStatement(method.rhs))
+        method.copy(rhs = modifiedTree)
+      }
 
-    private def addEnteringStatement(rhs: Tree): Tree = {
-      Block(List(makePrintlnStatement("Entering...")), rhs)
-    }
+      private def makePrintlnStatement(stringToPrint: String) = {
+        Apply(Ident(newTermName("println")), List(Literal(Constant(stringToPrint))))
+      }
 
-    private def addExitStatement(rhs: Tree): Tree = {
-      val resultValueTermName = newTermName("$result")
-      val saveOriginalExitValue = ValDef(NoMods, resultValueTermName, TypeTree(), rhs)
+      private def renderMethodParameters: Tree = {
+        val y = for {
+          parameterList <- method.vparamss
+        } yield {
+          renderParameterList(parameterList)
+        }
 
-      val printExitStatement = makePrintlnStatement("Exiting...")
+        val x = List.fill(y.size)("(%s)").mkString
 
-      val returnOriginalExitValue = Ident(resultValueTermName)
+        Apply(
+          Select(
+            Literal(Constant(x)),
+            newTermName("format")
+          ),
+          y
+        )
+      }
 
-      Block(List(saveOriginalExitValue, printExitStatement), returnOriginalExitValue)
+      private def renderParameterList(parameterList: List[ValDef]): Tree = {
+        val y = for {
+          parameter <- parameterList
+        } yield {
+          perArgument(parameter)
+        }
+
+        val x = List.fill(y.size)("%s").mkString(", ")
+
+        Apply(
+          Select(
+            Literal(Constant(x)),
+            newTermName("format")
+          ),
+          y
+        )
+      }
+
+      private def perArgument(x: ValDef): Tree = {
+        Apply(
+          Select(
+            Literal(Constant("%s: %s = %%s".format(x.name, x.tpt))),
+            newTermName("format")),
+          List(
+            Ident(x.name)
+          )
+        )
+      }
+
+      private def addEnteringStatement(rhs: Tree): Tree = {
+
+        val stringToPrint = "Entering method %s".format(method.name)
+
+        val treeToPrintln = Apply(
+          Select(Literal(Constant(stringToPrint)), newTermName("$plus")),
+          List(renderMethodParameters)
+        )
+
+        val enteringStatement = Apply(
+          Ident(newTermName("println")),
+          List(
+            treeToPrintln
+          )
+        )
+
+        Block(
+          List(enteringStatement),
+          rhs
+        )
+      }
+
+      private def addExitStatement(rhs: Tree): Tree = {
+        val resultValueTermName = newTermName("$result")
+        val saveOriginalExitValue = ValDef(NoMods, resultValueTermName, TypeTree(), rhs)
+
+        val printExitStatement = makeExitStatement(resultValueTermName)
+
+        val returnOriginalExitValue = Ident(resultValueTermName)
+
+        Block(List(saveOriginalExitValue, printExitStatement), returnOriginalExitValue)
+      }
+
+      private def makeExitStatement(resultValueTermName: TermName): Tree = {
+        Apply(
+          Ident(newTermName("println")),
+          List(
+            Apply(
+              Select(Literal("Exiting method %s with return value = ".format(method.name)), newTermName("$plus")),
+              List(Ident(resultValueTermName))
+            )
+          )
+        )
+      }
     }
   }
+
 }
 
 /**
