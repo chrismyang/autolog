@@ -1,0 +1,4 @@
+<plugin>
+  <name>DivByZero</name>
+  <classname>mypackage.DivByZero</classname>
+</plugin>
