@@ -38,11 +38,40 @@ class MyPlugin(val global: Global) extends Plugin {
 
       // TODO: fill in your logic here
       override def transform(tree: Tree): Tree = tree match {
-        case Literal(Constant(str: String)) => Literal(Constant("ICanHazYourStrngLiterls"))
+        case tree @ DefDef(mods, name, tparams, vparamss, tpt, rhs) if name.toString == "foo" =>
+          val modifiedTree = addExitStatement(addEnteringStatement(rhs))
+          tree.copy(rhs = modifiedTree)
 
         // don't forget this case, so that tree is actually traversed
         case _ => super.transform(tree)
       }
     }
+
+    private def makePrintlnStatement(stringToPrint: String) = Apply(Ident(newTermName("println")), List(Literal(Constant(stringToPrint))))
+
+    private def addEnteringStatement(rhs: Tree): Tree = {
+      Block(List(makePrintlnStatement("Entering...")), rhs)
+    }
+
+    private def addExitStatement(rhs: Tree): Tree = {
+      val resultValueTermName = newTermName("$result")
+      val saveOriginalExitValue = ValDef(NoMods, resultValueTermName, TypeTree(), rhs)
+
+      val printExitStatement = makePrintlnStatement("Exiting...")
+
+      val returnOriginalExitValue = Ident(resultValueTermName)
+
+      Block(List(saveOriginalExitValue, printExitStatement), returnOriginalExitValue)
+    }
   }
 }
+
+/**
+
+  def foo(x: Int) = {
+    println("Entering...")
+    val y = x + 5
+    println("Exiting...")
+    y
+  }
+  **/
