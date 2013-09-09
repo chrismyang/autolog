@@ -7,7 +7,7 @@ import nsc.plugins.PluginComponent
 
 class MyPlugin(val global: Global) extends Plugin {
   val name = "MyPlugin"
-  val description = "My first Scala compiler plugin"
+  val description = "My first Scala compiler plugin".format("foo")
   val components = List[PluginComponent](new ExampleComponent(global))
 }
 
